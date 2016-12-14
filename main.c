@@ -34,6 +34,8 @@ precise_t REAL_VAL;
 
 int main(int argc, char **argv) {
     precise_t (*test_fn) (precise_t); // Variable for holding the pointer to the test function
+    precise_t (*integrator) (thread_data_t *); // Integrator function
+
     int rc, NDIM = 3;
     int seed, randVecDims, i, n, d, th;
     long iter=0, lseed, batch_size;
@@ -41,6 +43,8 @@ int main(int argc, char **argv) {
     precise_t imin, imax;
     double d_batch_size, d_imin, d_imax;
     char *function_name = (char*) emalloc(256);
+    char *integrator_name = (char*) emalloc(256);
+
     REAL_VAL = 1;
 
     uint128_t count_in = 0, count_all =0;
@@ -57,6 +61,8 @@ int main(int argc, char **argv) {
     parse_assign_d(&d_imin, "-a", args, "-10");
     parse_assign_d(&d_imax, "-z", args, "10");
     parse_assign_cs(&function_name, "-f", args, "identity");
+    parse_assign_cs(&integrator_name, "-i", args, "riemann");
+
 
 
     batch_size = (long) d_batch_size;
@@ -75,6 +81,19 @@ int main(int argc, char **argv) {
     } else {
         fprintf(stderr, "Warning! No valid function name provided. Defaulting to identity function\n");
         test_fn = identity;
+    }
+    if ( !strcmp(integrator_name, "riem")) {
+        fprintf(stderr, "Integrator: Riemann\n");
+        integrator = riemann_integrator;
+    } else if ( !strcmp(integrator_name, "stoc")) {
+        fprintf(stderr, "Integrator: Stochastic \n");
+        integrator = stochastic_integrator;
+    } else if ( !strcmp(integrator_name, "nest")) {
+        fprintf(stderr, "Integrator: nested sampling\n");
+        die("Function not available!\n");
+    } else {
+        fprintf(stderr, "Warning! No valid function name provided. Defaulting to Riemann\n");
+        integrator = riemann_integrator;
     }
 
     fprintf(stderr, "Size of uint128: %d-bit\n Precise_t: %d-bit\n", 8*sizeof(uint128_t), 8*sizeof(precise_t));
@@ -112,6 +131,7 @@ int main(int argc, char **argv) {
         payload[th].imax = imax;
         payload[th].rngbuf_rb = &(rngbuf2[th]);
         payload[th].test_fn = test_fn;
+        payload[th].integrator = integrator;
         payload[th].filename = emalloc(256);
         sprintf(payload[th].filename, "out/%ld_pi_avg_t%d.csv", (long) tmp_seconds, th);
 
@@ -125,6 +145,16 @@ int main(int argc, char **argv) {
         pthread_join(threads[th], NULL);
     }
 
+    val_est = 0;
+    for (th = 0; th < NUM_THREADS; th++){
+        val_est += payload[th].val_est;
+    }
+    val_est /= (precise_t) NUM_THREADS;
+
+    if (NUM_THREADS >= 2) {
+        fprintf(stdout, "Threaded estimate of integral: %.13lf\n", (double) val_est);
+    }
+
     return EXIT_SUCCESS;
 }
 
@@ -133,7 +163,6 @@ int main(int argc, char **argv) {
 void *threaded_main(void *arg) {
     thread_data_t *payload = (thread_data_t *) arg;
     RedbearRNG_data *rngbuf_rb = payload->rngbuf_rb;
-    integrator_data_t params;
     FILE *pifile;
     stopwatch_t time;
     int i, J, tid;
@@ -151,7 +180,7 @@ void *threaded_main(void *arg) {
     for (J=0; J < 1; J++) {
         startTimer(&time);
 
-        val_calc = riemann_integrator(payload);
+        val_calc = payload->integrator(payload);
 //        val_calc = riemann_integrator(payload->test_fn, payload->imin, payload->imax, batch_size, rngbuf_rb);
 //        val_est = (1-alpha)*val_est + alpha * val_calc;
         pthread_mutex_lock(&lock_x);
@@ -179,6 +208,7 @@ void *threaded_main(void *arg) {
         iter++;
         alpha = 1./ log((double) 1+iter);
     }
+    payload->val_est = val_est;
 
     pthread_exit(NULL);
 }
@@ -204,8 +234,28 @@ precise_t riemann_integrator(thread_data_t *params) {
         y = test_fn(x);
         accu += y*dx;
     }
+    return accu;
+}
 
+precise_t stochastic_integrator(thread_data_t *params) {
 
+    precise_t (*test_fn)(precise_t) = params->test_fn;
+    precise_t imin  = params->imin;
+    precise_t imax  = params->imax;
+    long batch_size = params->batch_size;
+    RedbearRNG_data *rngbuf_rb = params->rngbuf_rb;
+    long iter;
+    precise_t result, x, y, range, dx, accu, step;
+    range = imax - imin;
+    dx = range/(precise_t) batch_size;
+
+    accu = 0;
+    for (iter=0; iter<batch_size; iter++) {
+        x = rand_redbear_uniform_r(rngbuf_rb);
+        x = range*x + imin;
+        y = test_fn(x);
+        accu += y*dx;
+    }
     return accu;
 }
 
