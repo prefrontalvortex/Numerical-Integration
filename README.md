@@ -37,13 +37,15 @@ cd back to the main directory and run with
 
 
 Example, integrating Normal from 0 to 2 with Rieman, batch = 1e6:
+
 `./bin/integrator -b 1e6 -f normal -a 0 -z 2 -i riem`
 
 Example, integrating Normal from 0 to 2 with Stochastic, batch = 1e7, 4 threads:
+
 `./bin/integrator -b 1e7 -f normal -a 0 -z 2 -i stoc -t 4`
 
 Some results comparing riemann and stochastic:
-
+```
 Normal, -2 to 2 (Ans = 0.95449973610364158, Python Scipy normal.cdf)
 Batch = 1e8
 Riemann:    0.954499736104 (perfect to 12 dp)
@@ -56,6 +58,7 @@ Stochastic: 0.94922105965 (difference 0.553%)
 Batch = 1e2
 Riemann:    0.9545141330226 (difference -0.0015%)
 Stochastic: 1.0090704489544 (difference -5.717%)
+```
 
 Conclusion: Riemann integration is much faster to execute (even with threading) and also much more accurate for a
 given batch size as compared to stochastic integration (naive implementation).
