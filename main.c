@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     arg_t *args = NULL;
     parser_populate(&args, argc, argv);
     parse_assign_i(&NUM_THREADS, "-t", args, "1");
-    parse_assign_d(&d_batch_size, "-b", args, "1e-7");
+    parse_assign_d(&d_batch_size, "-b", args, "1e7");
     parse_assign_d(&d_imin, "-a", args, "-10");
     parse_assign_d(&d_imax, "-z", args, "10");
     parse_assign_cs(&function_name, "-f", args, "identity");
